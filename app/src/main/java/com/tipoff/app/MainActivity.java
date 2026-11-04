@@ -1,0 +1,54 @@
+package com.tipoff.app;
+
+import android.app.*;
+import android.os.*;
+import android.graphics.Color;
+import android.view.*;
+import android.widget.*;
+import android.content.*;
+import android.text.InputType;
+import android.net.Uri;
+import org.json.*;
+import java.net.*;
+import java.io.*;
+import java.util.*;
+import java.util.concurrent.*;
+
+public class MainActivity extends Activity {
+    final int BG=Color.rgb(10,13,20), CARD=Color.rgb(23,29,40), GREEN=Color.rgb(50,214,139), MUTED=Color.rgb(157,169,187);
+    LinearLayout root, body; String page="Home", bdl="", odds="";
+    JSONArray games=new JSONArray(), events=new JSONArray();
+    ArrayList<String> legs=new ArrayList<>();
+    ArrayList<Double> prices=new ArrayList<>();
+    ExecutorService worker=Executors.newSingleThreadExecutor();
+
+    public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);bdl=getPreferences(0).getString("bdl","");odds=getPreferences(0).getString("odds","");restore();show();}
+    int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
+    TextView text(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setPadding(0,dp(5),0,dp(5));return t;}
+    LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);return l;}
+    void show(){
+        root=column();root.setBackgroundColor(BG);setContentView(root);
+        LinearLayout header=new LinearLayout(this);header.setPadding(dp(18),dp(14),dp(18),dp(10));
+        TextView brand=text("TIPOFF",26,GREEN);brand.setTypeface(null,1);header.addView(brand);root.addView(header);
+        ScrollView scroll=new ScrollView(this);body=column();body.setPadding(dp(16),dp(8),dp(16),dp(20));scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout nav=new LinearLayout(this);nav.setBackgroundColor(CARD);
+        for(String tab:new String[]{"Home","Games","Scanner","Acca","Settings"}){TextView t=text(tab,11,page.equals(tab)?GREEN:MUTED);t.setGravity(Gravity.CENTER);nav.addView(t,new LinearLayout.LayoutParams(0,dp(48),1));t.setOnClickListener(v->{page=tab;show();});}root.addView(nav);
+        if(page.equals("Home")){body.addView(text("UK NBA BETTING INTELLIGENCE",12,GREEN));body.addView(text("Make decisions with data.",26,Color.WHITE));card("Live NBA games","Fixtures and scores from BALLDONTLIE. Add your API key in Settings.");button("LOAD NBA GAMES",()->loadGames());button("LOAD UK ODDS",()->loadOdds());card("UK ONLY","Odds are requested with regions=uk and decimal prices. No US odds fallback.");}
+        if(page.equals("Games")){body.addView(text("NBA GAME CENTRE",22,Color.WHITE));button("REFRESH GAMES",()->loadGames());for(int i=0;i<games.length();i++){JSONObject g=games.optJSONObject(i);JSONObject h=g.optJSONObject("home_team"),a=g.optJSONObject("visitor_team");card((a==null?"Away":a.optString("full_name"))+" @ "+(h==null?"Home":h.optString("full_name")),g.optString("date")+"\n"+g.optString("status")+"\n"+g.optString("visitor_team_score")+" - "+g.optString("home_team_score"));}}
+        if(page.equals("Scanner")){body.addView(text("UK MONEYLINE SCANNER",22,Color.WHITE));button("REFRESH UK ODDS",()->loadOdds());for(int i=0;i<events.length();i++){JSONObject e=events.optJSONObject(i);card(e.optString("away_team")+" @ "+e.optString("home_team"),oddsSummary(e));}}
+        if(page.equals("Acca")){body.addView(text("ACCUMULATOR BUILDER",22,Color.WHITE));EditText label=input("Selection",false),price=input("Decimal odds (e.g. 1.80)",false);price.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);body.addView(label);body.addView(price);button("ADD LEG",()->{try{double p=Double.parseDouble(price.getText().toString());if(p<=1)throw new Exception();legs.add(label.getText().toString());prices.add(p);save();show();}catch(Exception e){toast("Enter decimal odds greater than 1.");}});double total=1;for(int i=0;i<legs.size();i++){total*=prices.get(i);final int k=i;card(legs.get(i),String.format(Locale.UK,"%.2f",prices.get(i))+"  •  "+String.format(Locale.UK,"%.2f",total));}if(!legs.isEmpty()){EditText stake=input("Stake in £",false);stake.setText("10");body.addView(stake);button("CALCULATE RETURN",()->{try{double s=Double.parseDouble(stake.getText().toString()),o=1;for(double p:prices)o*=p;card("POTENTIAL RETURN","£"+String.format(Locale.UK,"%.2f",s*o)+" • Profit £"+String.format(Locale.UK,"%.2f",s*(o-1)));}catch(Exception e){toast("Enter a valid stake.");}});button("CLEAR SLIP",()->{legs.clear();prices.clear();save();show();});}}
+        if(page.equals("Settings")){body.addView(text("DATA CONNECTIONS",22,Color.WHITE));body.addView(text("BALLDONTLIE API key",14,Color.WHITE));EditText b=input("Paste BALLDONTLIE key",true);b.setText(bdl);body.addView(b);body.addView(text("The Odds API key",14,Color.WHITE));EditText o=input("Paste Odds API key",true);o.setText(odds);body.addView(o);button("SAVE API KEYS",()->{bdl=b.getText().toString().trim();odds=o.getText().toString().trim();getPreferences(0).edit().putString("bdl",bdl).putString("odds",odds).apply();toast("Keys saved on this device.");show();});card("DATA LIMITS","Your provider plan must include UK bookmaker coverage. This app does not guarantee outcomes or provide financial advice. 18+ only.");}
+    }
+    void card(String title,String value){LinearLayout c=column();c.setBackgroundColor(CARD);c.setPadding(dp(13),dp(10),dp(13),dp(10));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(9);body.addView(c,p);TextView h=text(title,15,Color.WHITE);h.setTypeface(null,1);c.addView(h);c.addView(text(value,12,MUTED));}
+    void button(String label,Runnable action){Button b=new Button(this);b.setText(label);b.setOnClickListener(v->action.run());body.addView(b);}
+    EditText input(String hint,boolean secret){EditText e=new EditText(this);e.setSingleLine(true);e.setHint(hint);e.setTextColor(Color.WHITE);e.setHintTextColor(MUTED);if(secret)e.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);return e;}
+    void loadGames(){if(bdl.isEmpty()){page="Settings";show();toast("Add your BALLDONTLIE key first.");return;}get("https://api.balldontlie.io/v1/games?per_page=25",bdl,"Authorization",s->{try{games=new JSONObject(s).optJSONArray("data");if(games==null)games=new JSONArray();page="Games";show();}catch(Exception e){toast(s);}});}
+    void loadOdds(){if(odds.isEmpty()){page="Settings";show();toast("Add your Odds API key first.");return;}get("https://api.the-odds-api.com/v4/sports/basketball_nba/odds/?regions=uk&markets=h2h&oddsFormat=decimal&apiKey="+Uri.encode(odds),"","",s->{try{events=new JSONArray(s);page="Scanner";show();if(events.length()==0)toast("No UK odds returned. Check plan coverage.");}catch(Exception e){toast("UK odds unavailable: "+s);}});}
+    String oddsSummary(JSONObject e){StringBuilder out=new StringBuilder("UK bookmakers • decimal odds\n");JSONArray books=e.optJSONArray("bookmakers");if(books==null)return out.append("No prices available").toString();for(int i=0;i<books.length();i++){JSONObject b=books.optJSONObject(i);JSONArray markets=b.optJSONArray("markets");if(markets==null)continue;for(int j=0;j<markets.length();j++){JSONArray outcomes=markets.optJSONObject(j).optJSONArray("outcomes");if(outcomes==null)continue;for(int k=0;k<outcomes.length();k++){JSONObject x=outcomes.optJSONObject(k);out.append(b.optString("title")).append(": ").append(x.optString("name")).append(" ").append(x.optString("price")).append("\n");}}}return out.toString();}
+    interface Done{void result(String s);}
+    void get(String url,String key,String header,Done done){worker.execute(()->{String result;HttpURLConnection c=null;try{c=(HttpURLConnection)new URL(url).openConnection();if(!key.isEmpty())c.setRequestProperty(header,key);c.setConnectTimeout(15000);c.setReadTimeout(20000);int code=c.getResponseCode();InputStream in=code<400?c.getInputStream():c.getErrorStream();ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[4096];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);result=out.toString("UTF-8");if(code>=400)result="HTTP "+code+": "+result;}catch(Exception e){result="Network error: "+e.getMessage();}finally{if(c!=null)c.disconnect();}String r=result;runOnUiThread(()->done.result(r));});}
+    void save(){JSONArray a=new JSONArray();try{for(int i=0;i<legs.size();i++){JSONObject x=new JSONObject();x.put("label",legs.get(i));x.put("odds",prices.get(i));a.put(x);}}catch(Exception ignored){}getPreferences(0).edit().putString("acca",a.toString()).apply();}
+    void restore(){try{JSONArray a=new JSONArray(getPreferences(0).getString("acca","[]"));for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);legs.add(x.optString("label"));prices.add(x.optDouble("odds"));}}catch(Exception ignored){}}
+    void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
+    @Override protected void onDestroy(){super.onDestroy();worker.shutdownNow();}
+}
