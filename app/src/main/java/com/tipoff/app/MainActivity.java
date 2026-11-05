@@ -20,25 +20,70 @@ import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
     final int BG=Color.rgb(10,13,20), CARD=Color.rgb(23,29,40), GREEN=Color.rgb(50,214,139), MUTED=Color.rgb(157,169,187);
-    LinearLayout root, body; String page="Home", bdl="", odds="";
+    LinearLayout root, body; String page="Home", bdl="", odds="", profileName=""; boolean entered=false; int tourStep=0;
     JSONArray games=new JSONArray(), events=new JSONArray();
     ArrayList<JSONObject> news=new ArrayList<>();
     ArrayList<String> legs=new ArrayList<>();
     ArrayList<Double> prices=new ArrayList<>();
     ExecutorService worker=Executors.newSingleThreadExecutor();
 
-    public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);bdl=getPreferences(0).getString("bdl","");odds=getPreferences(0).getString("odds","");restore();show();}
+    public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);bdl=getPreferences(0).getString("bdl","");odds=getPreferences(0).getString("odds","");profileName=getPreferences(0).getString("profile_name","");restore();show();}
     int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
     TextView text(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setPadding(0,dp(5),0,dp(5));return t;}
     LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);return l;}
+    void baseScreen(){
+        root=column();root.setBackgroundColor(BG);setContentView(root);
+        LinearLayout header=new LinearLayout(this);header.setPadding(dp(22),dp(22),dp(22),dp(12));
+        TextView brand=text("TIPOFF",27,GREEN);brand.setTypeface(null,1);header.addView(brand);root.addView(header);
+    }
+    void showWelcome(){
+        baseScreen();
+        LinearLayout content=column();content.setPadding(dp(22),dp(28),dp(22),dp(20));root.addView(content,new LinearLayout.LayoutParams(-1,0,1));
+        TextView eyebrow=text("NBA • UK ODDS • MATCH INSIGHT",11,GREEN);eyebrow.setTypeface(null,1);content.addView(eyebrow);
+        TextView headline=text("The game\nbeyond the game.",34,Color.WHITE);headline.setTypeface(null,1);headline.setLineSpacing(dp(1),1f);content.addView(headline);
+        TextView intro=text("Your home for NBA fixtures, recent team form and UK bookmaker prices — all in one place.",16,MUTED);intro.setPadding(0,dp(12),0,dp(24));content.addView(intro);
+        LinearLayout panel=column();GradientDrawable panelBg=new GradientDrawable();panelBg.setColor(CARD);panelBg.setCornerRadius(dp(18));panel.setBackground(panelBg);panel.setPadding(dp(18),dp(18),dp(18),dp(18));content.addView(panel);
+        TextView label=text("YOUR PROFILE",11,GREEN);label.setTypeface(null,1);panel.addView(label);
+        TextView nameLabel=text("What should we call you?",15,Color.WHITE);panel.addView(nameLabel);
+        EditText name=input("Your first name or nickname",false);name.setText(profileName);panel.addView(name);
+        TextView note=text("This creates a local profile on this device. Online accounts and cloud sync are not enabled yet.",12,MUTED);note.setPadding(0,dp(8),0,dp(4));panel.addView(note);
+        LinearLayout.LayoutParams spacer=new LinearLayout.LayoutParams(-1,0,1);content.addView(new View(this),spacer);
+        buttonAt(content,"CONTINUE",()->{String n=name.getText().toString().trim();profileName=n.isEmpty()?"there":n;getPreferences(0).edit().putString("profile_name",profileName).apply();entered=true;if(!getPreferences(0).getBoolean("tour_done",false)){tourStep=0;showTutorial();}else show();});
+        TextView small=text("18+ only  •  Please gamble responsibly",11,MUTED);small.setGravity(Gravity.CENTER);content.addView(small);
+    }
+    void showTutorial(){
+        baseScreen();
+        LinearLayout content=column();content.setPadding(dp(22),dp(22),dp(22),dp(18));root.addView(content,new LinearLayout.LayoutParams(-1,0,1));
+        String[] titles={"Start with the games","Understand the matchup","Compare UK odds","Build an accumulator","Keep up with the NBA"};
+        String[] descriptions={
+            "The Games tab lists NBA fixtures and scores. Tap refresh to load the latest games from your data provider.",
+            "Choose Analyse Matchup to compare each team's recent results, win rate and average points scored and conceded. It is useful context, not a prediction.",
+            "The Scanner compares decimal prices returned by supported UK bookmakers. The best displayed price is not automatically a good-value bet.",
+            "Add selections and their decimal odds to your slip. TipOFF calculates combined odds and an example return based on your stake.",
+            "The News tab brings together NBA headlines. Tap a story to read it from the original publisher."
+        };
+        String[] tags={"01 / THE BASICS","02 / MATCH INSIGHT","03 / UK PRICE CHECK","04 / YOUR SLIP","05 / STAY INFORMED"};
+        TextView step=text(tags[tourStep],11,GREEN);step.setTypeface(null,1);content.addView(step);
+        TextView heading=text(titles[tourStep],30,Color.WHITE);heading.setTypeface(null,1);heading.setPadding(0,dp(18),0,dp(12));content.addView(heading);
+        TextView desc=text(descriptions[tourStep],16,MUTED);desc.setLineSpacing(dp(5),1f);content.addView(desc);
+        LinearLayout dots=new LinearLayout(this);dots.setPadding(0,dp(28),0,dp(18));for(int i=0;i<5;i++){View dot=new View(this);GradientDrawable d=new GradientDrawable();d.setShape(GradientDrawable.OVAL);d.setColor(i==tourStep?GREEN:Color.rgb(65,75,90));dot.setBackground(d);LinearLayout.LayoutParams dp1=new LinearLayout.LayoutParams(dp(i==tourStep?22:7),dp(7));dp1.rightMargin=dp(6);dots.addView(dot,dp1);}content.addView(dots);
+        LinearLayout.LayoutParams spacer=new LinearLayout.LayoutParams(-1,0,1);content.addView(new View(this),spacer);
+        if(tourStep>0)buttonAt(content,"BACK",()->{tourStep--;showTutorial();});
+        buttonAt(content,tourStep==4?"FINISH TOUR":"NEXT",()->{if(tourStep<4){tourStep++;showTutorial();}else{getPreferences(0).edit().putBoolean("tour_done",true).apply();page="Home";show();}});
+        TextView skip=text("Skip tour",13,MUTED);skip.setGravity(Gravity.CENTER);skip.setPadding(0,dp(12),0,dp(4));content.addView(skip);skip.setOnClickListener(v->{getPreferences(0).edit().putBoolean("tour_done",true).apply();page="Home";show();});
+    }
+    void buttonAt(LinearLayout parent,String label,Runnable action){
+        Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextSize(13);b.setTypeface(null,1);b.setTextColor(Color.rgb(8,18,16));GradientDrawable bg=new GradientDrawable();bg.setColor(GREEN);bg.setCornerRadius(dp(12));b.setBackground(bg);b.setPadding(dp(12),dp(8),dp(12),dp(8));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(9);parent.addView(b,p);b.setOnClickListener(v->action.run());
+    }
     void show(){
+        if(!entered){showWelcome();return;}
         root=column();root.setBackgroundColor(BG);setContentView(root);
         LinearLayout header=new LinearLayout(this);header.setPadding(dp(18),dp(14),dp(18),dp(10));
-        TextView brand=text("TIPOFF",26,GREEN);brand.setTypeface(null,1);header.addView(brand);root.addView(header);
+        TextView brand=text("TIPOFF",26,GREEN);brand.setTypeface(null,1);header.addView(brand);header.addView(new View(this),new LinearLayout.LayoutParams(0,1,1));TextView profile=text(profileName.isEmpty()?"NBA INSIGHT":profileName.toUpperCase(Locale.ROOT),10,MUTED);header.addView(profile);root.addView(header);
         ScrollView scroll=new ScrollView(this);body=column();body.setPadding(dp(16),dp(8),dp(16),dp(20));scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout nav=new LinearLayout(this);nav.setBackgroundColor(CARD);
         for(String tab:new String[]{"Home","Games","Scanner","Acca","News","Settings"}){TextView t=text(tab,11,page.equals(tab)?GREEN:MUTED);t.setGravity(Gravity.CENTER);nav.addView(t,new LinearLayout.LayoutParams(0,dp(48),1));t.setOnClickListener(v->{page=tab;show();});}root.addView(nav);
-        if(page.equals("Home")){body.addView(text("UK NBA BETTING INTELLIGENCE",12,GREEN));body.addView(text("Make decisions with data.",26,Color.WHITE));card("Live NBA games","Fixtures and scores from BALLDONTLIE. Add your API key in Settings.");button("LOAD NBA GAMES",()->loadGames());button("LOAD UK ODDS",()->loadOdds());card("UK ONLY","Odds are requested with regions=uk and decimal prices. No US odds fallback.");card("HOW ANALYSIS WORKS","Recent-form comparisons use each team's latest completed games. They are descriptive statistics, not guaranteed predictions or proven betting edges.");}
+        if(page.equals("Home")){body.addView(text("GOOD TO HAVE YOU BACK",11,GREEN));body.addView(text("Your NBA dashboard.",27,Color.WHITE));body.addView(text("Fixtures, form and UK prices. Start with a game or explore the scanner.",14,MUTED));card("Live NBA games","Fixtures and scores from BALLDONTLIE. Add your API key in Settings.");button("LOAD NBA GAMES",()->loadGames());button("LOAD UK ODDS",()->loadOdds());card("UK ONLY","Odds are requested with regions=uk and decimal prices. No US odds fallback.");card("HOW ANALYSIS WORKS","Recent-form comparisons use each team's latest completed games. They are descriptive statistics, not guaranteed predictions or proven betting edges.");}
         if(page.equals("Games")){body.addView(text("NBA GAME CENTRE",22,Color.WHITE));button("REFRESH GAMES",()->loadGames());for(int i=0;i<games.length();i++){JSONObject g=games.optJSONObject(i);JSONObject h=g.optJSONObject("home_team"),a=g.optJSONObject("visitor_team");String home=h==null?"Home":h.optString("full_name");String away=a==null?"Away":a.optString("full_name");card(away+" @ "+home,g.optString("date")+"\n"+g.optString("status")+"\n"+g.optString("visitor_team_score")+" - "+g.optString("home_team_score"));int homeId=h==null?0:h.optInt("id");int awayId=a==null?0:a.optInt("id");button("ANALYSE MATCHUP",()->analyseGame(away,awayId,home,homeId));}}
         if(page.equals("Scanner")){body.addView(text("UK MONEYLINE SCANNER",22,Color.WHITE));button("REFRESH UK ODDS",()->loadOdds());for(int i=0;i<events.length();i++){JSONObject e=events.optJSONObject(i);card(e.optString("away_team")+" @ "+e.optString("home_team"),oddsSummary(e));}}
         if(page.equals("Acca")){body.addView(text("ACCUMULATOR BUILDER",22,Color.WHITE));EditText label=input("Selection",false),price=input("Decimal odds (e.g. 1.80)",false);price.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);body.addView(label);body.addView(price);button("ADD LEG",()->{try{double p=Double.parseDouble(price.getText().toString());if(p<=1||label.getText().toString().trim().isEmpty())throw new Exception();legs.add(label.getText().toString().trim());prices.add(p);save();show();}catch(Exception e){toast("Enter a selection and decimal odds greater than 1.");}});for(int i=0;i<legs.size();i++){card(legs.get(i),String.format(Locale.UK,"%.2f",prices.get(i))+" decimal odds");final int index=i;button("REMOVE SELECTION",()->{legs.remove(index);prices.remove(index);save();show();});}if(!legs.isEmpty()){EditText stake=input("Stake in £",false);stake.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);stake.setText("10");body.addView(stake);button("CALCULATE RETURN",()->{try{double s=Double.parseDouble(stake.getText().toString()),o=1;for(double p:prices)o*=p;if(s<=0)throw new Exception();card("POTENTIAL RETURN","£"+String.format(Locale.UK,"%.2f",s*o)+" • Potential profit £"+String.format(Locale.UK,"%.2f",s*(o-1)));}catch(Exception e){toast("Enter a valid stake.");}});button("CLEAR SLIP",()->{legs.clear();prices.clear();save();show();});}}
