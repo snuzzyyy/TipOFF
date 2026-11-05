@@ -41,3 +41,15 @@ The welcome screen currently creates a local profile name stored on the device. 
 The current GitHub Actions output is a debug APK for testing. GitHub Actions builds do not by themselves update an APK already installed on a phone. Android requires each update to be signed with the same persistent release signing identity; a newly generated CI debug signing key is not a safe update channel.
 
 For hands-off updates, the intended production route is Google Play distribution (internal testing first, then production). This requires a Play developer account, a persistent release keystore/signing configuration, a signed Android App Bundle, store listing and policy materials, and Play Console credentials configured as GitHub Actions secrets. Those account credentials and signing materials must be supplied and controlled by the app owner; they must never be committed to this repository. Until that setup is complete, new test builds must be installed manually and Android may reject an update if it was signed with a different key.
+
+## Optional signed Play Store bundle
+The workflow always produces a debug APK for device testing. It only produces the `TipOFF-release-aab` artifact when all four release-signing GitHub Actions secrets are configured:
+
+- `ANDROID_KEYSTORE_BASE64` — base64-encoded persistent Java keystore file.
+- `ANDROID_KEYSTORE_PASSWORD` — keystore password.
+- `ANDROID_KEY_ALIAS` — alias of the signing key inside the keystore.
+- `ANDROID_KEY_PASSWORD` — password for that key.
+
+Create the release keystore locally on a trusted computer, keep a secure offline backup, and never commit the keystore or passwords to Git. Convert the keystore file to a single-line base64 value locally before adding it as the `ANDROID_KEYSTORE_BASE64` Actions secret. Add the four values under **Repository Settings → Secrets and variables → Actions**. Do not send the keystore or passwords in chat.
+
+The same release signing identity must be retained for every future update. Losing it can prevent updates to an app distributed outside Google Play. The AAB is only a build artifact; publishing and automatic delivery still require the owner's Google Play Console setup and review. The current workflow does not publish to Google Play automatically.
