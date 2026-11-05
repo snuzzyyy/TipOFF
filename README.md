@@ -37,3 +37,7 @@ The welcome screen currently creates a local profile name stored on the device. 
 - API keys are stored on-device. Do not distribute a public APK with personal keys embedded; a production release should use a secure backend and protected secret storage.
 - Accumulator calculations are illustrations only. Correlated selections, voids, bookmaker rules and limits can affect settlement.
 - Adults 18+ only. Gambling involves risk; never stake money you cannot afford to lose.
+## Updates and distribution
+The current GitHub Actions output is a debug APK for testing. GitHub Actions builds do not by themselves update an APK already installed on a phone. Android requires each update to be signed with the same persistent release signing identity; a newly generated CI debug signing key is not a safe update channel.
+
+For hands-off updates, the intended production route is Google Play distribution (internal testing first, then production). This requires a Play developer account, a persistent release keystore/signing configuration, a signed Android App Bundle, store listing and policy materials, and Play Console credentials configured as GitHub Actions secrets. Those account credentials and signing materials must be supplied and controlled by the app owner; they must never be committed to this repository. Until that setup is complete, new test builds must be installed manually and Android may reject an update if it was signed with a different key.
