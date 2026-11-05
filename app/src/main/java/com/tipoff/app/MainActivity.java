@@ -1,235 +1,66 @@
 package com.tipoff.app;
 
-import android.app.*;
-import android.os.*;
+import android.app.Activity;
+import android.os.Bundle;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
-import android.view.*;
-import android.widget.*;
-import android.content.*;
-import android.text.InputType;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.Toast;
+import android.content.Intent;
 import android.net.Uri;
-import android.util.Xml;
-import org.xmlpull.v1.XmlPullParser;
-import org.json.*;
-import java.net.*;
-import java.io.*;
-import java.io.StringReader;
-import java.util.*;
-import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
-    final int BG=Color.rgb(10,13,20), CARD=Color.rgb(23,29,40), GREEN=Color.rgb(50,214,139), MUTED=Color.rgb(157,169,187);
-    LinearLayout root, body; String page="Home", bdl="", odds="", profileName="", gamesUpdated="", oddsUpdated="", newsUpdated="", gamesError="", oddsError="", newsError="", analysisError=""; boolean entered=false; int tourStep=0; String gameFilter="All", gameQuery="";
-    JSONArray games=new JSONArray(), events=new JSONArray();
-    ArrayList<JSONObject> news=new ArrayList<>();
-    ArrayList<String> legs=new ArrayList<>();
-    ArrayList<Double> prices=new ArrayList<>();
-    ExecutorService worker=Executors.newSingleThreadExecutor();
+    private WebView webView;
+    private static final String APP_URL = "https://snuzzyyy.github.io/TipOFF/";
 
-    public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);bdl=getPreferences(0).getString("bdl","");odds=getPreferences(0).getString("odds","");profileName=getPreferences(0).getString("profile_name","");restore();show();}
-    int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
-    TextView text(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setPadding(0,dp(5),0,dp(5));return t;}
-    LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);return l;}
-    void applySafeInsets(View view){
-        if(Build.VERSION.SDK_INT>=21){
-            view.setOnApplyWindowInsetsListener((v,insets)->{
-                int top,bottom;
-                if(Build.VERSION.SDK_INT>=30){
-                    android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());
-                    top=bars.top;bottom=bars.bottom;
-                }else{
-                    top=insets.getSystemWindowInsetTop();bottom=insets.getSystemWindowInsetBottom();
+    @Override protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        getWindow().setStatusBarColor(Color.rgb(10,13,20));
+        getWindow().setNavigationBarColor(Color.rgb(10,13,20));
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.rgb(10,13,20));
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setUserAgentString(settings.getUserAgentString() + " TipOFFAndroid/2.0");
+        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url != null && (url.startsWith("https://snuzzyyy.github.io/") || url.startsWith("https://api."))) return false;
+                if (url != null && (url.startsWith("https://") || url.startsWith("http://"))) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+                    catch (Exception ignored) { Toast.makeText(MainActivity.this, "Could not open link.", Toast.LENGTH_SHORT).show(); }
+                    return true;
                 }
-                v.setPadding(0,top,0,bottom);
-                return insets;
-            });
-            view.post(()->view.requestApplyInsets());
-        }
-    }
-    void baseScreen(){
-        root=column();root.setBackgroundColor(BG);setContentView(root);applySafeInsets(root);
-        LinearLayout header=new LinearLayout(this);header.setPadding(dp(22),dp(22),dp(22),dp(12));
-        TextView brand=text("TIPOFF",27,GREEN);brand.setTypeface(null,1);header.addView(brand);root.addView(header);
-    }
-    void showWelcome(){
-        baseScreen();
-        LinearLayout content=column();content.setPadding(dp(22),dp(28),dp(22),dp(20));root.addView(content,new LinearLayout.LayoutParams(-1,0,1));
-        TextView eyebrow=text("NBA • UK ODDS • MATCH INSIGHT",11,GREEN);eyebrow.setTypeface(null,1);content.addView(eyebrow);
-        TextView headline=text("The game\nbeyond the game.",34,Color.WHITE);headline.setTypeface(null,1);headline.setLineSpacing(dp(1),1f);content.addView(headline);
-        TextView intro=text("Your home for NBA fixtures, recent team form and UK bookmaker prices — all in one place.",16,MUTED);intro.setPadding(0,dp(12),0,dp(24));content.addView(intro);
-        LinearLayout panel=column();GradientDrawable panelBg=new GradientDrawable();panelBg.setColor(CARD);panelBg.setCornerRadius(dp(18));panel.setBackground(panelBg);panel.setPadding(dp(18),dp(18),dp(18),dp(18));content.addView(panel);
-        TextView label=text("YOUR PROFILE",11,GREEN);label.setTypeface(null,1);panel.addView(label);
-        TextView nameLabel=text("What should we call you?",15,Color.WHITE);panel.addView(nameLabel);
-        EditText name=input("Your first name or nickname",false);name.setText(profileName);panel.addView(name);
-        TextView note=text("This creates a local profile on this device. Online accounts and cloud sync are not enabled yet.",12,MUTED);note.setPadding(0,dp(8),0,dp(4));panel.addView(note);
-        LinearLayout.LayoutParams spacer=new LinearLayout.LayoutParams(-1,0,1);content.addView(new View(this),spacer);
-        buttonAt(content,"CONTINUE",()->{String n=name.getText().toString().trim();profileName=n.isEmpty()?"there":n;getPreferences(0).edit().putString("profile_name",profileName).apply();entered=true;if(!getPreferences(0).getBoolean("tour_done",false)){tourStep=0;showTutorial();}else show();});
-        TextView small=text("18+ only  •  Please gamble responsibly",11,MUTED);small.setGravity(Gravity.CENTER);content.addView(small);
-    }
-    void showTutorial(){
-        baseScreen();
-        LinearLayout content=column();content.setPadding(dp(22),dp(24),dp(22),dp(18));root.addView(content,new LinearLayout.LayoutParams(-1,0,1));
-        String[] titles={"Start with the games","Understand the matchup","Compare UK odds","Build an accumulator","Keep up with the NBA"};
-        String[] descriptions={"The Games tab lists NBA fixtures and scores. Refresh to load the latest fixtures from your data provider.","Compare each team's recent results, win rate and average points scored and conceded. This is historical context, not a prediction.","Compare decimal prices from supported UK bookmakers. The highest price is not automatically good value.","Add selections and decimal odds to your slip. TipOFF calculates combined odds and an example return from your stake.","Catch up with NBA headlines. Open any story to read it from the original publisher."};
-        String[] tags={"THE BASICS","MATCH INSIGHT","UK PRICE CHECK","YOUR SLIP","NBA NEWS"};
-        LinearLayout top=column();
-        TextView brand=text("TIPOFF",25,GREEN);brand.setTypeface(null,1);brand.setLetterSpacing(0.10f);top.addView(brand);
-        TextView step=text("GETTING STARTED     "+(tourStep+1)+" OF 5",11,GREEN);step.setTypeface(null,1);step.setPadding(0,dp(34),0,dp(8));top.addView(step);
-        TextView tag=text(tags[tourStep],10,MUTED);tag.setTypeface(null,1);top.addView(tag);
-        TextView heading=text(titles[tourStep],29,Color.WHITE);heading.setTypeface(null,1);heading.setLineSpacing(dp(1),1f);heading.setPadding(0,dp(12),0,dp(12));top.addView(heading);
-        LinearLayout panel=column();GradientDrawable panelBg=new GradientDrawable();panelBg.setColor(CARD);panelBg.setCornerRadius(dp(18));panelBg.setStroke(dp(1),Color.rgb(48,62,80));panel.setBackground(panelBg);panel.setPadding(dp(17),dp(17),dp(17),dp(17));
-        TextView desc=text(descriptions[tourStep],16,Color.rgb(220,226,236));desc.setLineSpacing(dp(5),1f);panel.addView(desc);top.addView(panel);
-        LinearLayout progress=new LinearLayout(this);progress.setGravity(Gravity.CENTER_VERTICAL);progress.setPadding(0,dp(22),0,dp(6));
-        for(int i=0;i<5;i++){View segment=new View(this);segment.setBackgroundColor(i<=tourStep?GREEN:Color.rgb(55,65,80));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(4),1);p.rightMargin=dp(5);progress.addView(segment,p);}top.addView(progress);content.addView(top);
-        content.addView(new View(this),new LinearLayout.LayoutParams(-1,0,1));
-        if(tourStep>0)buttonAt(content,"BACK",()->{tourStep--;showTutorial();});
-        buttonAt(content,tourStep==4?"FINISH":"CONTINUE",()->{if(tourStep<4){tourStep++;showTutorial();}else{getPreferences(0).edit().putBoolean("tour_done",true).apply();page="Home";show();}});
-        TextView skip=text("SKIP INTRODUCTION",12,MUTED);skip.setTypeface(null,1);skip.setGravity(Gravity.CENTER);skip.setPadding(0,dp(10),0,dp(8));content.addView(skip);skip.setOnClickListener(v->{getPreferences(0).edit().putBoolean("tour_done",true).apply();page="Home";show();});
-    }
-    void buttonAt(LinearLayout parent,String label,Runnable action){
-        Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextSize(13);b.setTypeface(null,1);b.setTextColor(Color.rgb(8,18,16));GradientDrawable bg=new GradientDrawable();bg.setColor(GREEN);bg.setCornerRadius(dp(12));b.setBackground(bg);b.setMinHeight(dp(50));b.setMinimumHeight(dp(50));b.setPadding(dp(12),dp(4),dp(12),dp(4));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(50));p.bottomMargin=dp(8);parent.addView(b,p);b.setOnClickListener(v->action.run());
-    }
-    void show(){
-        if(!entered){showWelcome();return;}
-        root=column();root.setBackgroundColor(BG);applySafeInsets(root);setContentView(root);
-        LinearLayout header=new LinearLayout(this);header.setPadding(dp(18),dp(8),dp(18),dp(4));
-        TextView brand=text("TIPOFF",23,GREEN);brand.setTypeface(null,1);brand.setLetterSpacing(0.12f);header.addView(brand);header.addView(new View(this),new LinearLayout.LayoutParams(0,1,1));TextView profile=text(profileName.isEmpty()?"NBA INSIGHT":profileName.toUpperCase(Locale.ROOT),10,MUTED);profile.setTypeface(null,1);profile.setLetterSpacing(0.06f);header.addView(profile);root.addView(header);
-        ScrollView scroll=new ScrollView(this);body=column();body.setPadding(dp(16),dp(8),dp(16),dp(20));scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        LinearLayout nav=new LinearLayout(this);nav.setOrientation(LinearLayout.HORIZONTAL);nav.setGravity(Gravity.CENTER);nav.setBackgroundColor(Color.rgb(18,23,33));nav.setPadding(dp(3),dp(5),dp(3),dp(3));
-        String[] tabs={"Home","Games","Scanner","Acca","News","Settings"};String[] glyphs={"⌂","◷","◎","▣","▤","⚙"};
-        for(int i=0;i<tabs.length;i++){final String tab=tabs[i];LinearLayout item=column();item.setGravity(Gravity.CENTER);TextView glyph=text(glyphs[i],17,page.equals(tab)?GREEN:MUTED);glyph.setGravity(Gravity.CENTER);glyph.setPadding(0,0,0,0);item.addView(glyph);TextView t=text(tab,10,page.equals(tab)?GREEN:MUTED);t.setTypeface(null,page.equals(tab)?1:0);t.setGravity(Gravity.CENTER);t.setPadding(0,0,0,0);item.addView(t);View indicator=new View(this);indicator.setBackgroundColor(page.equals(tab)?GREEN:Color.rgb(18,23,33));LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(dp(20),dp(3));ip.topMargin=dp(3);item.addView(indicator,ip);nav.addView(item,new LinearLayout.LayoutParams(0,dp(58),1));item.setOnClickListener(v->{page=tab;show();});}root.addView(nav,new LinearLayout.LayoutParams(-1,dp(58)));
-        if(page.equals("Home")){
-            body.addView(text("YOUR COURTSIDE OVERVIEW",10,GREEN));
-            TextView welcome=text("The game.\nBeyond the numbers.",29,Color.WHITE);welcome.setTypeface(null,1);welcome.setLineSpacing(dp(1),1f);welcome.setPadding(0,dp(5),0,dp(8));body.addView(welcome);
-            body.addView(text("NBA fixtures, recent team form and UK bookmaker prices — together in one place.",14,MUTED));
-            card("GET CONNECTED","Connect your data providers to unlock fixtures, matchup form and live UK odds. Your API keys are saved on this device.");
-            button("CONNECT DATA SOURCES",()->{page="Settings";show();});
-            body.addView(text("QUICK ACTIONS",10,GREEN));
-            button("OPEN NBA GAME CENTRE",()->{page="Games";show();loadGames();});
-            button("OPEN UK ODDS SCANNER",()->{page="Scanner";show();loadOdds();});
-            card("UK DECIMAL ODDS","The scanner requests UK bookmaker prices only. Prices and availability depend on your Odds API plan.");
-            card("HONEST MATCH INSIGHT","Recent-form comparisons describe past results. They are not guaranteed predictions and do not establish a betting edge.");
-        }
-        if(page.equals("Analysis")&&!analysisError.isEmpty()){body.addView(text("MATCHUP ANALYSIS",22,Color.WHITE));card("ANALYSIS COULD NOT LOAD",analysisError);button("BACK TO GAMES",()->{page="Games";show();});}
-        if(page.equals("Games")){
-            body.addView(text("NBA  /  FIXTURES",10,GREEN));
-            TextView heading=text("Game centre",26,Color.WHITE);heading.setTypeface(null,1);body.addView(heading);
-            body.addView(text("Fixtures, live scores and recent-form matchups.",13,MUTED));
-            LinearLayout refreshRow=new LinearLayout(this);refreshRow.setGravity(Gravity.CENTER_VERTICAL);
-            TextView update=text(gamesUpdated.isEmpty()?"DATA NOT LOADED":"UPDATED  "+gamesUpdated.toUpperCase(Locale.ROOT),9,MUTED);update.setTypeface(null,1);refreshRow.addView(update,new LinearLayout.LayoutParams(0,-2,1));
-            TextView refresh=text("↻  REFRESH",11,GREEN);refresh.setTypeface(null,1);refreshRow.addView(refresh);refresh.setOnClickListener(v->loadGames());LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,-2);rp.topMargin=dp(9);rp.bottomMargin=dp(8);body.addView(refreshRow,rp);
-            if(!gamesError.isEmpty())card("GAMES COULD NOT LOAD",gamesError);else if(games.length()==0)card("CONNECT YOUR GAME DATA","Refresh to retrieve NBA fixtures. Add your BALLDONTLIE API key in Settings if you have not connected it yet.");
-            EditText search=input("Search teams",false);search.setText(gameQuery);body.addView(search);
-            button("SEARCH",()->{gameQuery=search.getText().toString().trim();show();});
-            LinearLayout filters=new LinearLayout(this);filters.setOrientation(LinearLayout.HORIZONTAL);filters.setGravity(Gravity.CENTER);filters.setBackgroundColor(Color.rgb(18,24,35));
-            for(String f:new String[]{"All","Upcoming","Live","Final"}){TextView chip=text(f,11,gameFilter.equals(f)?Color.rgb(8,18,16):MUTED);chip.setGravity(Gravity.CENTER);chip.setTypeface(null,gameFilter.equals(f)?1:0);if(gameFilter.equals(f)){GradientDrawable selected=new GradientDrawable();selected.setColor(GREEN);selected.setCornerRadius(dp(9));chip.setBackground(selected);}chip.setPadding(dp(5),dp(9),dp(5),dp(9));LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(0,-2,1);fp.setMargins(dp(3),dp(4),dp(3),dp(7));filters.addView(chip,fp);chip.setOnClickListener(v->{gameFilter=f;show();});}body.addView(filters);
-            int shown=0;for(int i=0;i<games.length();i++){JSONObject g=games.optJSONObject(i);if(g==null)continue;JSONObject h=g.optJSONObject("home_team"),a=g.optJSONObject("visitor_team");String home=h==null?"Home":h.optString("full_name");String away=a==null?"Away":a.optString("full_name");String status=gameStatus(g);String q=gameQuery.toLowerCase(Locale.ROOT);if(!q.isEmpty()&&!home.toLowerCase(Locale.ROOT).contains(q)&&!away.toLowerCase(Locale.ROOT).contains(q))continue;if("Final".equals(gameFilter)&&!status.equals("FINAL"))continue;if("Live".equals(gameFilter)&&!status.startsWith("LIVE"))continue;if("Upcoming".equals(gameFilter)&&(status.equals("FINAL")||status.startsWith("LIVE")))continue;shown++;gameCard(g,away,home,status,h==null?0:h.optInt("id"),a==null?0:a.optInt("id"));}
-            if(games.length()>0&&shown==0)card("NO MATCHES","No fixtures match these filters. Try All or clear your search.");
-        }
-        if(page.equals("Scanner")){
-            body.addView(text("UK MARKETS  /  MONEYLINE",10,GREEN));TextView heading=text("Odds scanner",26,Color.WHITE);heading.setTypeface(null,1);body.addView(heading);
-            body.addView(text("Compare the best available decimal price from UK bookmakers.",13,MUTED));
-            LinearLayout refreshRow=new LinearLayout(this);refreshRow.setGravity(Gravity.CENTER_VERTICAL);TextView update=text(oddsUpdated.isEmpty()?"WAITING FOR ODDS":"UPDATED  "+oddsUpdated.toUpperCase(Locale.ROOT),9,MUTED);update.setTypeface(null,1);refreshRow.addView(update,new LinearLayout.LayoutParams(0,-2,1));TextView refresh=text("↻  REFRESH ODDS",11,GREEN);refresh.setTypeface(null,1);refreshRow.addView(refresh);refresh.setOnClickListener(v->loadOdds());LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,-2);rp.topMargin=dp(10);rp.bottomMargin=dp(10);body.addView(refreshRow,rp);
-            if(!oddsError.isEmpty())card("ODDS COULD NOT LOAD",oddsError);else if(events.length()==0)card("NO UK PRICES YET","Refresh to request NBA moneyline prices. Your Odds API plan must include the UK region.");
-            for(int i=0;i<events.length();i++){JSONObject e=events.optJSONObject(i);if(e!=null)oddsCard(e);}
-            card("HOW TO READ THIS","Best price is the highest displayed bookmaker price, not a prediction or value rating. Implied probability is a mathematical conversion of the odds.");
-        }
-        if(page.equals("Acca")){
-            body.addView(text("YOUR BET SLIP",10,GREEN));
-            TextView title=text("Accumulator",26,Color.WHITE);title.setTypeface(null,1);body.addView(title);
-            body.addView(text("Build a slip with decimal odds. Your combined price and potential return update from the selections you add.",13,MUTED));
-            LinearLayout summary=column();GradientDrawable sb=new GradientDrawable();sb.setColor(Color.rgb(20,29,40));sb.setCornerRadius(dp(16));sb.setStroke(dp(1),Color.rgb(48,62,80));summary.setBackground(sb);summary.setPadding(dp(15),dp(13),dp(15),dp(13));LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(10);sp.bottomMargin=dp(12);body.addView(summary,sp);
-            TextView count=text("SLIP  /  "+legs.size()+" SELECTION"+(legs.size()==1?"":"S"),10,GREEN);count.setTypeface(null,1);summary.addView(count);
-            double combined=1;for(double p:prices)combined*=p;
-            TextView combinedText=text(legs.isEmpty()?"—":String.format(Locale.UK,"%.2f",combined),27,Color.WHITE);combinedText.setTypeface(null,1);combinedText.setPadding(0,dp(3),0,0);summary.addView(combinedText);
-            summary.addView(text("COMBINED DECIMAL ODDS",9,MUTED));
-            if(legs.isEmpty())card("YOUR SLIP IS EMPTY","Add a selection below, or use the ADD TO SLIP buttons in the UK odds scanner. Your selections stay saved on this device.");
-            for(int i=0;i<legs.size();i++)slipLeg(i);
-            body.addView(text("ADD A SELECTION",10,GREEN));
-            EditText label=input("Selection name",false),price=input("Decimal odds  (e.g. 1.80)",false);price.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);body.addView(label);body.addView(price);
-            button("ADD TO SLIP",()->{try{double p=Double.parseDouble(price.getText().toString().trim());if(!Double.isFinite(p)||p<=1||label.getText().toString().trim().isEmpty())throw new Exception();legs.add(label.getText().toString().trim());prices.add(p);save();show();}catch(Exception e){toast("Enter a selection and decimal odds greater than 1.");}});
-            if(!legs.isEmpty()){
-                body.addView(text("POTENTIAL RETURN",10,GREEN));
-                EditText stake=input("Stake in £",false);stake.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);stake.setText(getPreferences(0).getString("acca_stake","10"));body.addView(stake);
-                button("CALCULATE RETURN",()->{try{double amount=Double.parseDouble(stake.getText().toString().trim()),o=1;for(double p:prices)o*=p;if(!Double.isFinite(amount)||amount<=0||!Double.isFinite(o))throw new Exception();getPreferences(0).edit().putString("acca_stake",String.format(Locale.UK,"%.2f",amount)).apply();double gross=amount*o,profit=gross-amount;card("RETURN ESTIMATE","£"+String.format(Locale.UK,"%.2f",gross)+" total return\n£"+String.format(Locale.UK,"%.2f",profit)+" potential profit\n£"+String.format(Locale.UK,"%.2f",amount)+" stake\nIllustrative only — not guaranteed. Odds can change.");}catch(Exception e){toast("Enter a valid stake greater than £0.");}});
-                button("CLEAR SLIP",()->{legs.clear();prices.clear();save();show();});
+                return false;
             }
-        }
-        if(page.equals("News")){body.addView(text("THE LATEST",10,GREEN));body.addView(text("NBA NEWS",28,Color.WHITE));body.addView(text("Headlines and updates from ESPN.",14,MUTED));if(!newsUpdated.isEmpty())body.addView(text("UPDATED "+newsUpdated.toUpperCase(Locale.ROOT),10,MUTED));button("REFRESH NEWS",()->loadNews());if(!newsError.isEmpty())card("NEWS COULD NOT LOAD",newsError);else if(news.isEmpty())card("NO HEADLINES YET","Refresh to load the latest NBA headlines.");for(JSONObject n:news)newsCard(n);}
-        if(page.equals("Settings")){body.addView(text("YOUR TIPOFF PROFILE",22,Color.WHITE));card("SIGNED IN ON THIS DEVICE",profileName.isEmpty()?"Local profile":profileName+"\nThis is a device-only profile, not an online account.");button("REPLAY THE QUICK TOUR",()->{tourStep=0;showTutorial();});button("SIGN OUT",()->{entered=false;show();});body.addView(text("DATA CONNECTIONS",22,Color.WHITE));body.addView(text("BALLDONTLIE API key",14,Color.WHITE));EditText b=input("Paste BALLDONTLIE key",true);b.setText(bdl);body.addView(b);body.addView(text("The Odds API key",14,Color.WHITE));EditText o=input("Paste Odds API key",true);o.setText(odds);body.addView(o);button("SAVE API KEYS",()->{bdl=b.getText().toString().trim();odds=o.getText().toString().trim();getPreferences(0).edit().putString("bdl",bdl).putString("odds",odds).apply();toast("Keys saved on this device.");show();});card("DATA LIMITS","Your provider plan must include UK bookmaker coverage. The app does not guarantee outcomes or provide financial advice. 18+ only.");}
+        });
+        setContentView(webView);
+        if (savedInstanceState != null) webView.restoreState(savedInstanceState);
+        else webView.loadUrl(APP_URL);
     }
-    void analyseGame(String away,int awayId,String home,int homeId){if(bdl.isEmpty()){page="Settings";show();toast("Add your BALLDONTLIE key first.");return;}if(awayId==0||homeId==0){toast("Team information is missing.");return;}analysisError="";page="Analysis";show();card("MATCHUP ANALYSIS",away+" @ "+home+"\nLoading each team's recent completed games…");get("https://api.balldontlie.io/v1/games?per_page=10&team_ids[]="+awayId+"&postseason=false",bdl,"Authorization",a->{get("https://api.balldontlie.io/v1/games?per_page=10&team_ids[]="+homeId+"&postseason=false",bdl,"Authorization",h->{try{JSONObject awayStats=formStats(new JSONObject(a).optJSONArray("data"),awayId);JSONObject homeStats=formStats(new JSONObject(h).optJSONArray("data"),homeId);page="Analysis";show();card("RECENT FORM",away+"\n"+formatStats(awayStats));card("RECENT FORM",home+"\n"+formatStats(homeStats));int awayPlayed=awayStats.optInt("played"),homePlayed=homeStats.optInt("played");if(awayPlayed==0||homePlayed==0){card("FORM COMPARISON","There is not enough completed-game data to compare both teams yet. Check the provider response and try again later.");}else{double aw=awayStats.optDouble("winRate"),hw=homeStats.optDouble("winRate");double awayDiff=awayStats.optDouble("pointDiff"),homeDiff=homeStats.optDouble("pointDiff");String edge=hw>aw?home:aw>hw?away:"Neither team";String diffEdge=homeDiff>awayDiff?home:awayDiff>homeDiff?away:"Neither team";card("FORM COMPARISON","Win-rate leader: "+edge+" ("+String.format(Locale.UK,"%.0f%%",Math.max(hw,aw)*100)+").\nPoint-difference leader: "+diffEdge+" ("+String.format(Locale.UK,"%+.1f",Math.max(homeDiff,awayDiff))+" average).\nSamples: "+awayPlayed+" games for "+away+"; "+homePlayed+" for "+home+". These are historical indicators, not a prediction.");}card("MODEL LIMITATIONS","This sample does not account for injuries, starting lineups, rest, travel, player availability, pace or matchup strength. Do not treat it as a betting recommendation.");}catch(Exception e){analysisError=friendlyError(e.getMessage());page="Analysis";show();}});});}
-    JSONObject formStats(JSONArray rows,int teamId)throws Exception{int played=0,wins=0,pointsFor=0,pointsAgainst=0,last5Wins=0,last5Losses=0,homeWins=0,homePlayed=0,awayWins=0,awayPlayed=0;ArrayList<JSONObject> sorted=new ArrayList<>();if(rows!=null)for(int i=0;i<rows.length();i++){JSONObject g=rows.optJSONObject(i);if(g!=null&&g.optString("status","").toLowerCase(Locale.ROOT).startsWith("final"))sorted.add(g);}Collections.sort(sorted,(x,y)->x.optString("date").compareTo(y.optString("date")));int start=Math.max(0,sorted.size()-10);ArrayList<Boolean> results=new ArrayList<>();for(int i=start;i<sorted.size();i++){JSONObject g=sorted.get(i);int home=g.optInt("home_team_score"),away=g.optInt("visitor_team_score");if(home==0&&away==0)continue;boolean isHome=g.optJSONObject("home_team")!=null&&g.optJSONObject("home_team").optInt("id")==teamId;int pf=isHome?home:away,pa=isHome?away:home;boolean won=pf>pa;pointsFor+=pf;pointsAgainst+=pa;played++;if(won)wins++;if(isHome){homePlayed++;if(won)homeWins++;}else{awayPlayed++;if(won)awayWins++;}results.add(won);}int recent=Math.max(0,results.size()-5);for(int i=recent;i<results.size();i++){if(results.get(i))last5Wins++;else last5Losses++;}int streak=0;boolean streakWin=!results.isEmpty()&&results.get(results.size()-1);for(int i=results.size()-1;i>=0;i--){if(results.get(i)!=streakWin)break;streak++;}JSONObject out=new JSONObject();out.put("played",played);out.put("lastGameDate",results.isEmpty()?"":sorted.get(sorted.size()-1).optString("date"));out.put("wins",wins);out.put("losses",played-wins);out.put("winRate",played==0?0:(double)wins/played);out.put("pointsFor",played==0?0:(double)pointsFor/played);out.put("pointsAgainst",played==0?0:(double)pointsAgainst/played);out.put("pointDiff",played==0?0:(double)(pointsFor-pointsAgainst)/played);out.put("last5Wins",last5Wins);out.put("last5Losses",last5Losses);out.put("streak",streak);out.put("streakWin",streakWin);out.put("homeWins",homeWins);out.put("homePlayed",homePlayed);out.put("awayWins",awayWins);out.put("awayPlayed",awayPlayed);return out;}
-    String formatStats(JSONObject s){String streak=s.optBoolean("streakWin")?"W":"L";return s.optInt("wins")+" W - "+s.optInt("losses")+" L from "+s.optInt("played")+" games\nLast 5: "+s.optInt("last5Wins")+" W - "+s.optInt("last5Losses")+" L\nCurrent run: "+(s.optInt("streak")>0?s.optInt("streak")+streak:"—")+"\nWin rate: "+String.format(Locale.UK,"%.0f%%",s.optDouble("winRate")*100)+"\nAverage points scored: "+String.format(Locale.UK,"%.1f",s.optDouble("pointsFor"))+"\nAverage points conceded: "+String.format(Locale.UK,"%.1f",s.optDouble("pointsAgainst"))+"\nAverage point difference: "+String.format(Locale.UK,"%+.1f",s.optDouble("pointDiff"))+"\nMost recent completed game: "+(s.optString("lastGameDate").isEmpty()?"Unavailable":s.optString("lastGameDate"))+"\nHome record: "+s.optInt("homeWins")+"-"+(s.optInt("homePlayed")-s.optInt("homeWins"))+" • Away record: "+s.optInt("awayWins")+"-"+(s.optInt("awayPlayed")-s.optInt("awayWins"));}
-    void gameCard(JSONObject g,String away,String home,String status,int homeId,int awayId){
-        LinearLayout c=column();GradientDrawable bg=new GradientDrawable();bg.setColor(Color.rgb(19,26,38));bg.setCornerRadius(dp(15));bg.setStroke(dp(1),Color.rgb(43,54,70));c.setBackground(bg);c.setPadding(dp(14),dp(12),dp(14),dp(12));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.bottomMargin=dp(10);body.addView(c,cp);
-        LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);TextView date=text(formatGameDate(g.optString("date")),10,MUTED);top.addView(date,new LinearLayout.LayoutParams(0,-2,1));TextView state=text(status,9,status.startsWith("LIVE")?GREEN:MUTED);state.setTypeface(null,1);top.addView(state);c.addView(top);
-        View divider=new View(this);divider.setBackgroundColor(Color.rgb(43,54,70));LinearLayout.LayoutParams dl=new LinearLayout.LayoutParams(-1,dp(1));dl.topMargin=dp(7);dl.bottomMargin=dp(8);c.addView(divider,dl);
-        boolean scored=status.equals("FINAL")||status.startsWith("LIVE");String awayScore=g.optString("visitor_team_score","—"),homeScore=g.optString("home_team_score","—");
-        LinearLayout awayRow=new LinearLayout(this);awayRow.setGravity(Gravity.CENTER_VERTICAL);TextView av=text(away,15,Color.WHITE);av.setTypeface(null,1);awayRow.addView(av,new LinearLayout.LayoutParams(0,-2,1));TextView as=text(scored?awayScore:"AWAY",scored?18:9,scored?Color.WHITE:MUTED);as.setTypeface(null,1);awayRow.addView(as);c.addView(awayRow);
-        LinearLayout homeRow=new LinearLayout(this);homeRow.setGravity(Gravity.CENTER_VERTICAL);TextView hv=text(home,15,Color.WHITE);hv.setTypeface(null,1);homeRow.addView(hv,new LinearLayout.LayoutParams(0,-2,1));TextView hs=text(scored?homeScore:"HOME",scored?18:9,scored?Color.WHITE:MUTED);hs.setTypeface(null,1);homeRow.addView(hs);c.addView(homeRow);
-        Button analyse=new Button(this);analyse.setText("VIEW MATCH INSIGHT  →");analyse.setAllCaps(false);analyse.setTextSize(10);analyse.setTypeface(null,1);analyse.setTextColor(GREEN);GradientDrawable ab=new GradientDrawable();ab.setColor(Color.rgb(26,39,48));ab.setCornerRadius(dp(9));analyse.setBackground(ab);LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(-1,dp(38));ap.topMargin=dp(9);c.addView(analyse,ap);analyse.setOnClickListener(v->analyseGame(away,awayId,home,homeId));
+
+    @Override protected void onSaveInstanceState(Bundle outState) {
+        if (webView != null) webView.saveState(outState);
+        super.onSaveInstanceState(outState);
     }
-    void oddsCard(JSONObject e){
-        LinearLayout c=column();GradientDrawable bg=new GradientDrawable();bg.setColor(Color.rgb(19,26,38));bg.setCornerRadius(dp(15));bg.setStroke(dp(1),Color.rgb(43,54,70));c.setBackground(bg);c.setPadding(dp(14),dp(12),dp(14),dp(12));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.bottomMargin=dp(10);body.addView(c,cp);
-        TextView matchup=text(e.optString("away_team")+"  @  "+e.optString("home_team"),15,Color.WHITE);matchup.setTypeface(null,1);c.addView(matchup);
-        String start=e.optString("commence_time");if(!start.isEmpty()){TextView time=text("TIP-OFF  "+formatOddsTime(start).toUpperCase(Locale.ROOT),9,MUTED);time.setTypeface(null,1);time.setPadding(0,dp(2),0,dp(8));c.addView(time);}
-        JSONArray books=e.optJSONArray("bookmakers");LinkedHashMap<String,Double> best=new LinkedHashMap<>(),low=new LinkedHashMap<>();LinkedHashMap<String,Integer> count=new LinkedHashMap<>();LinkedHashMap<String,String> shops=new LinkedHashMap<>(),updates=new LinkedHashMap<>();
-        if(books!=null)for(int i=0;i<books.length();i++){JSONObject b=books.optJSONObject(i);if(b==null)continue;JSONArray markets=b.optJSONArray("markets");if(markets==null)continue;for(int j=0;j<markets.length();j++){JSONObject m=markets.optJSONObject(j);if(m==null||!"h2h".equals(m.optString("key")))continue;JSONArray os=m.optJSONArray("outcomes");if(os==null)continue;for(int k=0;k<os.length();k++){JSONObject o=os.optJSONObject(k);if(o==null)continue;String name=o.optString("name");double p=o.optDouble("price",0);if(p<=1)continue;count.put(name,count.containsKey(name)?count.get(name)+1:1);if(!low.containsKey(name)||p<low.get(name))low.put(name,p);if(!best.containsKey(name)||p>best.get(name)){best.put(name,p);shops.put(name,b.optString("title"));updates.put(name,b.optString("last_update"));}}}}
-        if(best.isEmpty()){c.addView(text("No bookmaker prices available for this fixture.",12,MUTED));return;}
-        TextView label=text("BEST UK PRICE  /  DECIMAL",9,GREEN);label.setTypeface(null,1);label.setLetterSpacing(0.1f);label.setPadding(0,dp(3),0,dp(4));c.addView(label);
-        for(String name:best.keySet()){
-            final String pick=name;final double price=best.get(name);
-            LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(7),0,dp(7));
-            LinearLayout details=column();TextView team=text(name,14,Color.WHITE);team.setTypeface(null,1);details.addView(team);TextView book=text(shops.get(name)+"  ·  "+count.get(name)+" prices",10,MUTED);details.addView(book);row.addView(details,new LinearLayout.LayoutParams(0,-2,1));
-            LinearLayout priceBox=column();priceBox.setGravity(Gravity.END);TextView value=text(String.format(Locale.UK,"%.2f",price),22,GREEN);value.setTypeface(null,1);value.setPadding(0,0,0,0);priceBox.addView(value);TextView range=text(String.format(Locale.UK,"Range %.2f–%.2f",low.get(name),price),9,MUTED);range.setPadding(0,0,0,0);priceBox.addView(range);row.addView(priceBox);c.addView(row);
-            Button add=new Button(this);add.setText("ADD "+name.toUpperCase(Locale.ROOT)+" TO SLIP");add.setAllCaps(false);add.setTextSize(10);add.setTypeface(null,1);add.setTextColor(Color.rgb(8,18,16));GradientDrawable addBg=new GradientDrawable();addBg.setColor(GREEN);addBg.setCornerRadius(dp(9));add.setBackground(addBg);LinearLayout.LayoutParams addLp=new LinearLayout.LayoutParams(-1,dp(38));addLp.topMargin=dp(3);addLp.bottomMargin=dp(4);c.addView(add,addLp);add.setOnClickListener(v->addOddsLeg(e,pick,price));
-            View line=new View(this);line.setBackgroundColor(Color.rgb(43,54,70));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(1));lp.topMargin=dp(4);c.addView(line,lp);
-        }
-        TextView note=text("Best displayed price only · implied probability is not a forecast.",9,MUTED);note.setPadding(0,dp(5),0,0);c.addView(note);
+
+    @Override public void onBackPressed() {
+        if (webView != null && webView.canGoBack()) webView.goBack();
+        else super.onBackPressed();
     }
-    void newsCard(JSONObject n){
-        LinearLayout c=column();GradientDrawable bg=new GradientDrawable();bg.setColor(Color.rgb(19,26,38));bg.setCornerRadius(dp(15));bg.setStroke(dp(1),Color.rgb(43,54,70));c.setBackground(bg);c.setPadding(dp(16),dp(14),dp(16),dp(13));
-        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.bottomMargin=dp(10);body.addView(c,cp);
-        TextView source=text("ESPN  /  NBA",9,GREEN);source.setTypeface(null,1);source.setLetterSpacing(0.12f);c.addView(source);
-        TextView title=text(n.optString("title"),16,Color.WHITE);title.setTypeface(null,1);title.setLineSpacing(dp(2),1f);title.setPadding(0,dp(5),0,dp(3));c.addView(title);
-        String desc=n.optString("description").replaceAll("<[^>]*>","").trim();if(desc.length()>160)desc=desc.substring(0,157)+"…";
-        if(!desc.isEmpty()){TextView summary=text(desc,13,MUTED);summary.setPadding(0,dp(4),0,dp(7));summary.setLineSpacing(dp(2),1f);c.addView(summary);}
-        String link=n.optString("link");if(!link.isEmpty()){LinearLayout footer=new LinearLayout(this);footer.setGravity(Gravity.CENTER_VERTICAL);TextView read=text("READ STORY",10,GREEN);read.setTypeface(null,1);footer.addView(read);TextView arrow=text("  ↗",13,GREEN);footer.addView(arrow);c.addView(footer);c.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(link)));}catch(Exception e){toast("Could not open story.");}});}
+
+    @Override protected void onDestroy() {
+        if (webView != null) { webView.stopLoading(); webView.destroy(); }
+        super.onDestroy();
     }
-    void slipLeg(int index){
-        LinearLayout c=column();GradientDrawable bg=new GradientDrawable();bg.setColor(CARD);bg.setCornerRadius(dp(14));bg.setStroke(dp(1),Color.rgb(48,62,80));c.setBackground(bg);c.setPadding(dp(14),dp(11),dp(14),dp(11));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.bottomMargin=dp(9);body.addView(c,cp);
-        TextView name=text((index+1)+".  "+legs.get(index),14,Color.WHITE);name.setTypeface(null,1);c.addView(name);
-        TextView price=text(String.format(Locale.UK,"%.2f",prices.get(index))+"  DECIMAL",12,GREEN);price.setTypeface(null,1);price.setPadding(0,dp(4),0,dp(7));c.addView(price);
-        LinearLayout actions=new LinearLayout(this);actions.setOrientation(LinearLayout.HORIZONTAL);TextView edit=text("EDIT",11,MUTED);TextView remove=text("REMOVE",11,Color.rgb(255,125,125));edit.setTypeface(null,1);remove.setTypeface(null,1);actions.addView(edit,new LinearLayout.LayoutParams(0,-2,1));actions.addView(remove,new LinearLayout.LayoutParams(0,-2,1));c.addView(actions);edit.setOnClickListener(v->editLeg(index));remove.setOnClickListener(v->{legs.remove(index);prices.remove(index);save();show();});
-    }
-    void card(String title,String value){LinearLayout c=column();GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Color.rgb(29,37,51),Color.rgb(18,24,35)});bg.setCornerRadius(dp(17));bg.setStroke(dp(1),Color.rgb(48,62,80));c.setBackground(bg);if(Build.VERSION.SDK_INT>=21)c.setElevation(dp(3));c.setPadding(dp(18),dp(16),dp(18),dp(16));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(13);body.addView(c,p);TextView h=text(title.toUpperCase(Locale.ROOT),11,GREEN);h.setTypeface(null,1);h.setLetterSpacing(0.1f);c.addView(h);TextView v=text(value,14,Color.rgb(229,234,242));v.setLineSpacing(dp(3),1.05f);v.setPadding(0,dp(6),0,0);c.addView(v);}
-    void button(String label,Runnable action){Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextSize(13);b.setTypeface(null,1);b.setLetterSpacing(0.035f);b.setTextColor(Color.rgb(8,18,16));GradientDrawable bg=new GradientDrawable();bg.setColor(GREEN);bg.setCornerRadius(dp(12));b.setBackground(bg);b.setMinHeight(dp(50));b.setMinimumHeight(dp(50));if(Build.VERSION.SDK_INT>=21){b.setElevation(dp(1));}b.setPadding(dp(14),dp(4),dp(14),dp(4));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(50));p.bottomMargin=dp(8);b.setLayoutParams(p);b.setOnClickListener(v->action.run());body.addView(b);}
-    EditText input(String hint,boolean secret){EditText e=new EditText(this);e.setSingleLine(true);e.setHint(hint);e.setTextColor(Color.WHITE);e.setHintTextColor(MUTED);if(secret)e.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);return e;}
-    void loadGames(){if(bdl.isEmpty()){page="Settings";show();toast("Add your BALLDONTLIE key first.");return;}games=new JSONArray();gamesError="";page="Games";show();card("LOADING NBA GAMES","Requesting the latest fixtures and scores…");get("https://api.balldontlie.io/v1/games?per_page=25",bdl,"Authorization",s->{try{games=new JSONObject(s).optJSONArray("data");if(games==null)games=new JSONArray();gamesUpdated=stamp();gamesError="";page="Games";show();}catch(Exception e){gamesError=friendlyError(s);page="Games";show();}});}
-    void loadNews(){news.clear();newsError="";page="News";show();card("LOADING NBA NEWS","Requesting the latest headlines…");get("https://www.espn.com/espn/rss/nba/news","","",xml->{try{news=parseNews(xml);newsUpdated=stamp();newsError="";page="News";show();if(news.isEmpty())toast("No NBA headlines were returned.");}catch(Exception e){newsError=friendlyError(e.getMessage());page="News";show();}});}
-    ArrayList<JSONObject> parseNews(String xml)throws Exception{ArrayList<JSONObject> items=new ArrayList<>();XmlPullParser p=Xml.newPullParser();p.setInput(new StringReader(xml));int event=p.getEventType();JSONObject current=null;String field="";while(event!=XmlPullParser.END_DOCUMENT){if(event==XmlPullParser.START_TAG){String tag=p.getName();if("item".equals(tag))current=new JSONObject();else if(current!=null&&("title".equals(tag)||"description".equals(tag)||"link".equals(tag)))field=tag;}else if(event==XmlPullParser.TEXT&&current!=null&&!field.isEmpty()){String value=p.getText();current.put(field,current.optString(field)+value);}else if(event==XmlPullParser.END_TAG){String tag=p.getName();if("item".equals(tag)&&current!=null){items.add(current);current=null;}if(tag.equals(field))field="";}event=p.next();}return items;}
-    void loadOdds(){if(odds.isEmpty()){page="Settings";show();toast("Add your Odds API key first.");return;}events=new JSONArray();oddsError="";page="Scanner";show();card("LOADING UK ODDS","Requesting current NBA moneyline prices from UK bookmakers…");get("https://api.the-odds-api.com/v4/sports/basketball_nba/odds/?regions=uk&markets=h2h&oddsFormat=decimal&apiKey="+Uri.encode(odds),"","",s->{try{events=upcomingOdds(new JSONArray(s));oddsUpdated=stamp();oddsError="";page="Scanner";show();if(events.length()==0)toast("No upcoming UK NBA odds returned. Check plan coverage or refresh closer to tip-off.");}catch(Exception e){oddsError=friendlyError(s);page="Scanner";show();}});}
-    JSONArray upcomingOdds(JSONArray source){JSONArray upcoming=new JSONArray();ArrayList<JSONObject> sorted=new ArrayList<>();long now=System.currentTimeMillis();for(int i=0;i<source.length();i++){JSONObject event=source.optJSONObject(i);if(event==null)continue;long start=parseOddsTime(event.optString("commence_time"));if(start>now)sorted.add(event);}Collections.sort(sorted,(a,b)->Long.compare(parseOddsTime(a.optString("commence_time")),parseOddsTime(b.optString("commence_time"))));for(JSONObject event:sorted)upcoming.put(event);return upcoming;}
-    long parseOddsTime(String raw){try{java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX",Locale.US);f.setTimeZone(TimeZone.getTimeZone("UTC"));Date d=f.parse(raw);return d==null?0:d.getTime();}catch(Exception e){return 0;}}
-    ArrayList<String> oddsOutcomes(JSONObject e){LinkedHashSet<String> names=new LinkedHashSet<>();JSONArray books=e.optJSONArray("bookmakers");if(books!=null)for(int i=0;i<books.length();i++){JSONObject b=books.optJSONObject(i);JSONArray markets=b.optJSONArray("markets");if(markets!=null)for(int j=0;j<markets.length();j++){JSONObject m=markets.optJSONObject(j);if(m!=null&&"h2h".equals(m.optString("key"))){JSONArray outcomes=m.optJSONArray("outcomes");if(outcomes!=null)for(int k=0;k<outcomes.length();k++){JSONObject o=outcomes.optJSONObject(k);if(o!=null&&!o.optString("name").isEmpty())names.add(o.optString("name"));}}}}return new ArrayList<>(names);}
-    double bestOdds(JSONObject e,String name){double best=0;JSONArray books=e.optJSONArray("bookmakers");if(books!=null)for(int i=0;i<books.length();i++){JSONObject b=books.optJSONObject(i);JSONArray markets=b.optJSONArray("markets");if(markets!=null)for(int j=0;j<markets.length();j++){JSONObject m=markets.optJSONObject(j);if(m!=null&&"h2h".equals(m.optString("key"))){JSONArray outcomes=m.optJSONArray("outcomes");if(outcomes!=null)for(int k=0;k<outcomes.length();k++){JSONObject o=outcomes.optJSONObject(k);if(o!=null&&name.equals(o.optString("name")))best=Math.max(best,o.optDouble("price",0));}}}}return best;}
-    String bestBook(JSONObject e,String name){double best=0;String shop="";JSONArray books=e.optJSONArray("bookmakers");if(books!=null)for(int i=0;i<books.length();i++){JSONObject b=books.optJSONObject(i);JSONArray markets=b.optJSONArray("markets");if(markets!=null)for(int j=0;j<markets.length();j++){JSONObject m=markets.optJSONObject(j);if(m!=null&&"h2h".equals(m.optString("key"))){JSONArray outcomes=m.optJSONArray("outcomes");if(outcomes!=null)for(int k=0;k<outcomes.length();k++){JSONObject o=outcomes.optJSONObject(k);double p=o==null?0:o.optDouble("price",0);if(o!=null&&name.equals(o.optString("name"))&&p>best){best=p;shop=b.optString("title");}}}}}return shop;}
-    void editLeg(int index){if(index<0||index>=legs.size())return;LinearLayout form=column();form.setPadding(dp(8),dp(4),dp(8),0);EditText name=input("Selection",false);name.setText(legs.get(index));EditText price=input("Decimal odds (e.g. 1.85)",false);price.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);price.setText(String.format(Locale.UK,"%.2f",prices.get(index)));form.addView(name);form.addView(price);new AlertDialog.Builder(this).setTitle("Edit selection").setView(form).setNegativeButton("Cancel",null).setPositiveButton("Save", (dialog,which)->{String label=name.getText().toString().trim();try{double value=Double.parseDouble(price.getText().toString().trim());if(label.isEmpty()||!Double.isFinite(value)||value<=1)throw new Exception();legs.set(index,label);prices.set(index,value);save();show();}catch(Exception e){toast("Enter a selection and valid decimal odds greater than 1.");}}).show();}
-    void addOddsLeg(JSONObject event,String outcome,double price){String shop=bestBook(event,outcome);String label=event.optString("away_team")+" @ "+event.optString("home_team")+" — "+outcome+" (UK best"+(shop.isEmpty()?" price":" • "+shop)+")";for(String existing:legs)if(existing.equals(label)){toast("That selection is already in your slip.");return;}if(!Double.isFinite(price)||price<=1){toast("No valid price is available.");return;}legs.add(label);prices.add(price);save();page="Acca";show();toast("Added to your accumulator.");}
-    String oddsSummary(JSONObject e){StringBuilder out=new StringBuilder("BEST UK PRICE • DECIMAL\n");JSONArray books=e.optJSONArray("bookmakers");if(books==null)return out.append("No prices available").toString();LinkedHashMap<String,Double> best=new LinkedHashMap<>();LinkedHashMap<String,Double> lowest=new LinkedHashMap<>();LinkedHashMap<String,Integer> counts=new LinkedHashMap<>();LinkedHashMap<String,String> shops=new LinkedHashMap<>();LinkedHashMap<String,String> updates=new LinkedHashMap<>();for(int i=0;i<books.length();i++){JSONObject b=books.optJSONObject(i);JSONArray markets=b.optJSONArray("markets");if(markets==null)continue;for(int j=0;j<markets.length();j++){JSONObject market=markets.optJSONObject(j);if(market==null||!"h2h".equals(market.optString("key")))continue;JSONArray outcomes=market.optJSONArray("outcomes");if(outcomes==null)continue;for(int k=0;k<outcomes.length();k++){JSONObject x=outcomes.optJSONObject(k);String name=x.optString("name");double price=x.optDouble("price",0);if(price>1){counts.put(name,counts.containsKey(name)?counts.get(name)+1:1);if(!lowest.containsKey(name)||price<lowest.get(name))lowest.put(name,price);if(!best.containsKey(name)||price>best.get(name)){best.put(name,price);shops.put(name,b.optString("title"));updates.put(name,b.optString("last_update"));}}}}}if(best.isEmpty())return out.append("No UK bookmaker prices returned.").toString();for(String name:best.keySet()){double price=best.get(name);out.append("\n").append(name).append("\n").append(String.format(Locale.UK,"%.2f",price)).append("  •  ").append(shops.get(name)).append("\nAvailable bookmaker prices: ").append(counts.containsKey(name)?counts.get(name):0).append(" • range ").append(String.format(Locale.UK,"%.2f",lowest.containsKey(name)?lowest.get(name):price)).append("–").append(String.format(Locale.UK,"%.2f",price)).append("\nBookmaker price updated: ").append(updates.get(name)==null||updates.get(name).isEmpty()?"Time unavailable":formatOddsTime(updates.get(name))).append("\nImplied probability: ").append(String.format(Locale.UK,"%.1f%%",100.0/price)).append(" (raw odds conversion, not a true forecast)\n");}out.append("\nBest displayed price only; not a value-bet rating.");String time=e.optString("commence_time");if(!time.isEmpty())out.append("\nStart: ").append(formatOddsTime(time));return out.toString();}
-    String formatOddsTime(String raw){try{java.text.SimpleDateFormat in=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX",Locale.US);in.setTimeZone(TimeZone.getTimeZone("UTC"));Date d=in.parse(raw);if(d==null)return raw;return new java.text.SimpleDateFormat("EEE d MMM, HH:mm",Locale.UK).format(d)+" UK local time";}catch(Exception e){return raw;}}
-    String formatGameDate(String raw){if(raw==null||raw.isEmpty())return "Date to be confirmed";try{java.text.SimpleDateFormat in=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSX",Locale.US);in.setTimeZone(TimeZone.getTimeZone("UTC"));Date d=in.parse(raw);if(d==null)throw new Exception();return new java.text.SimpleDateFormat("EEE d MMM • HH:mm",Locale.UK).format(d);}catch(Exception ignored){try{java.text.SimpleDateFormat in=new java.text.SimpleDateFormat("yyyy-MM-dd",Locale.US);Date d=in.parse(raw.substring(0,10));return new java.text.SimpleDateFormat("EEE d MMM",Locale.UK).format(d);}catch(Exception e){return raw;}}}
-    String gameStatus(JSONObject g){String status=g.optString("status","Scheduled");if(status.toLowerCase(Locale.ROOT).startsWith("final"))return "FINAL";if(status.contains(":")&&status.matches(".*[0-9].*"))return "LIVE • "+status;return status;}
-    String gameScore(JSONObject g){String status=g.optString("status","").toLowerCase(Locale.ROOT);if(status.startsWith("final")||status.contains("quarter")||status.contains("half")||status.contains("live"))return g.optString("visitor_team_score","0")+" - "+g.optString("home_team_score","0");return "Tip-off pending";}
-    String stamp(){return new java.text.SimpleDateFormat("dd MMM yyyy, HH:mm",Locale.UK).format(new Date());}
-    String friendlyError(String raw){if(raw==null||raw.trim().isEmpty())return "The service returned an empty response. Check your connection and try again.";String value=raw.trim().replaceAll("\\s+"," ");if(value.length()>220)value=value.substring(0,217)+"…";return value;}
-    interface Done{void result(String s);}
-    void get(String url,String key,String header,Done done){worker.execute(()->{String result;HttpURLConnection c=null;try{c=(HttpURLConnection)new URL(url).openConnection();if(!key.isEmpty())c.setRequestProperty(header,key);c.setConnectTimeout(15000);c.setReadTimeout(20000);int code=c.getResponseCode();InputStream in=code<400?c.getInputStream():c.getErrorStream();ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[4096];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);result=out.toString("UTF-8");if(code>=400)result="HTTP "+code+": "+result;}catch(Exception e){result="Network error: "+e.getMessage();}finally{if(c!=null)c.disconnect();}String r=result;runOnUiThread(()->done.result(r));});}
-    void save(){JSONArray a=new JSONArray();try{for(int i=0;i<legs.size();i++){JSONObject x=new JSONObject();x.put("label",legs.get(i));x.put("odds",prices.get(i));a.put(x);}}catch(Exception ignored){}getPreferences(0).edit().putString("acca",a.toString()).apply();}
-    void restore(){try{JSONArray a=new JSONArray(getPreferences(0).getString("acca","[]"));for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);legs.add(x.optString("label"));prices.add(x.optDouble("odds"));}}catch(Exception ignored){}}
-    void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
-    @Override public void onBackPressed(){if(!entered){super.onBackPressed();return;}if(!"Home".equals(page)){page="Home";show();}else{super.onBackPressed();}}
-    @Override protected void onDestroy(){super.onDestroy();worker.shutdownNow();}
 }
