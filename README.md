@@ -1,6 +1,6 @@
 # TipOFF — UK NBA app
 
-A native Android NBA companion built around UK bookmaker prices, decimal odds and GBP calculations.
+TipOFF is transitioning from a native-only Android app to a hosted web app inside a lightweight Android shell. The hosted UI is designed to update centrally, so normal interface and feature changes will not require a fresh APK install.
 
 ## Experience
 - Branded welcome screen with a local device profile.
@@ -17,7 +17,7 @@ A native Android NBA companion built around UK bookmaker prices, decimal odds an
 - NBA headlines from ESPN RSS.
 - API keys entered in Settings and stored in app preferences on the device.
 
-## Build an APK
+## Hosted app direction\nThe first hosted web app foundation lives in `web/` and is a responsive installable web app. It keeps profile settings, API keys and accumulator selections in the browser's local storage on the device. The Vercel deployment configuration is in `vercel.json`. The Android shell will be switched to this hosted URL after the first deployment is live.\n\n**Update model:** one final Android shell update is required to point the installed app at the hosted web app. After that, changes deployed to the hosted site can appear in TipOFF without reinstalling the Android app. The hosting project must be connected and deployed before the Android shell can safely use its permanent URL.\n\n## Build an APK
 The **TipOFF APK build v3** GitHub Actions workflow runs on pushes to `main` and can also be started manually. On success, download the `TipOFF-debug-apk` artifact from the workflow run. It is a debug APK for testing, not a Play Store release.
 
 ## API setup
