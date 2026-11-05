@@ -31,8 +31,19 @@ public class MainActivity extends Activity {
     int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
     TextView text(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setPadding(0,dp(5),0,dp(5));return t;}
     LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);return l;}
+    void applySafeInsets(View view){
+        if(Build.VERSION.SDK_INT>=21){
+            view.setOnApplyWindowInsetsListener((v,insets)->{
+                int top=insets.getSystemWindowInsetTop();
+                int bottom=insets.getSystemWindowInsetBottom();
+                v.setPadding(v.getPaddingLeft(),top,v.getPaddingRight(),bottom);
+                return insets;
+            });
+            view.requestApplyInsets();
+        }
+    }
     void baseScreen(){
-        root=column();root.setBackgroundColor(BG);setContentView(root);
+        root=column();root.setBackgroundColor(BG);applySafeInsets(root);setContentView(root);
         LinearLayout header=new LinearLayout(this);header.setPadding(dp(22),dp(22),dp(22),dp(12));
         TextView brand=text("TIPOFF",27,GREEN);brand.setTypeface(null,1);header.addView(brand);root.addView(header);
     }
@@ -70,14 +81,14 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams spacer=new LinearLayout.LayoutParams(-1,0,1);content.addView(new View(this),spacer);
         if(tourStep>0)buttonAt(content,"BACK",()->{tourStep--;showTutorial();});
         buttonAt(content,tourStep==4?"FINISH TOUR":"NEXT",()->{if(tourStep<4){tourStep++;showTutorial();}else{getPreferences(0).edit().putBoolean("tour_done",true).apply();page="Home";show();}});
-        TextView skip=text("Skip tour",13,MUTED);skip.setGravity(Gravity.CENTER);skip.setPadding(0,dp(12),0,dp(4));content.addView(skip);skip.setOnClickListener(v->{getPreferences(0).edit().putBoolean("tour_done",true).apply();page="Home";show();});
+        TextView skip=text("Skip tour",14,GREEN);skip.setGravity(Gravity.CENTER);skip.setPadding(0,dp(12),0,dp(4));content.addView(skip);skip.setOnClickListener(v->{getPreferences(0).edit().putBoolean("tour_done",true).apply();page="Home";show();});
     }
     void buttonAt(LinearLayout parent,String label,Runnable action){
         Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextSize(13);b.setTypeface(null,1);b.setTextColor(Color.rgb(8,18,16));GradientDrawable bg=new GradientDrawable();bg.setColor(GREEN);bg.setCornerRadius(dp(12));b.setBackground(bg);b.setPadding(dp(12),dp(8),dp(12),dp(8));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(9);parent.addView(b,p);b.setOnClickListener(v->action.run());
     }
     void show(){
         if(!entered){showWelcome();return;}
-        root=column();root.setBackgroundColor(BG);setContentView(root);
+        root=column();root.setBackgroundColor(BG);applySafeInsets(root);setContentView(root);
         LinearLayout header=new LinearLayout(this);header.setPadding(dp(18),dp(14),dp(18),dp(10));
         TextView brand=text("TIPOFF",26,GREEN);brand.setTypeface(null,1);brand.setLetterSpacing(0.12f);header.addView(brand);header.addView(new View(this),new LinearLayout.LayoutParams(0,1,1));TextView profile=text(profileName.isEmpty()?"NBA INSIGHT":profileName.toUpperCase(Locale.ROOT),10,MUTED);profile.setTypeface(null,1);profile.setLetterSpacing(0.06f);header.addView(profile);root.addView(header);
         ScrollView scroll=new ScrollView(this);body=column();body.setPadding(dp(16),dp(8),dp(16),dp(20));scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
