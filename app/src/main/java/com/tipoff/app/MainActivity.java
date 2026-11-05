@@ -69,24 +69,23 @@ public class MainActivity extends Activity {
     }
     void showTutorial(){
         baseScreen();
-        LinearLayout content=column();content.setPadding(dp(22),dp(22),dp(22),dp(18));root.addView(content,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout content=column();content.setPadding(dp(22),dp(24),dp(22),dp(18));root.addView(content,new LinearLayout.LayoutParams(-1,0,1));
         String[] titles={"Start with the games","Understand the matchup","Compare UK odds","Build an accumulator","Keep up with the NBA"};
-        String[] descriptions={
-            "The Games tab lists NBA fixtures and scores. Tap refresh to load the latest games from your data provider.",
-            "Choose Analyse Matchup to compare each team's recent results, win rate and average points scored and conceded. It is useful context, not a prediction.",
-            "The Scanner compares decimal prices returned by supported UK bookmakers. The best displayed price is not automatically a good-value bet.",
-            "Add selections and their decimal odds to your slip. TipOFF calculates combined odds and an example return based on your stake.",
-            "The News tab brings together NBA headlines. Tap a story to read it from the original publisher."
-        };
-        String[] tags={"01 / THE BASICS","02 / MATCH INSIGHT","03 / UK PRICE CHECK","04 / YOUR SLIP","05 / STAY INFORMED"};
-        TextView step=text(tags[tourStep],11,GREEN);step.setTypeface(null,1);content.addView(step);
-        TextView heading=text(titles[tourStep],30,Color.WHITE);heading.setTypeface(null,1);heading.setPadding(0,dp(18),0,dp(12));content.addView(heading);
-        TextView desc=text(descriptions[tourStep],16,MUTED);desc.setLineSpacing(dp(5),1f);content.addView(desc);
-        LinearLayout dots=new LinearLayout(this);dots.setPadding(0,dp(28),0,dp(18));for(int i=0;i<5;i++){View dot=new View(this);GradientDrawable d=new GradientDrawable();d.setShape(GradientDrawable.OVAL);d.setColor(i==tourStep?GREEN:Color.rgb(65,75,90));dot.setBackground(d);LinearLayout.LayoutParams dp1=new LinearLayout.LayoutParams(dp(i==tourStep?22:7),dp(7));dp1.rightMargin=dp(6);dots.addView(dot,dp1);}content.addView(dots);
-        LinearLayout.LayoutParams spacer=new LinearLayout.LayoutParams(-1,0,1);content.addView(new View(this),spacer);
+        String[] descriptions={"The Games tab lists NBA fixtures and scores. Refresh to load the latest fixtures from your data provider.","Compare each team's recent results, win rate and average points scored and conceded. This is historical context, not a prediction.","Compare decimal prices from supported UK bookmakers. The highest price is not automatically good value.","Add selections and decimal odds to your slip. TipOFF calculates combined odds and an example return from your stake.","Catch up with NBA headlines. Open any story to read it from the original publisher."};
+        String[] tags={"THE BASICS","MATCH INSIGHT","UK PRICE CHECK","YOUR SLIP","NBA NEWS"};
+        LinearLayout top=column();
+        TextView brand=text("TIPOFF",25,GREEN);brand.setTypeface(null,1);brand.setLetterSpacing(0.10f);top.addView(brand);
+        TextView step=text("GETTING STARTED     "+(tourStep+1)+" OF 5",11,GREEN);step.setTypeface(null,1);step.setPadding(0,dp(34),0,dp(8));top.addView(step);
+        TextView tag=text(tags[tourStep],10,MUTED);tag.setTypeface(null,1);top.addView(tag);
+        TextView heading=text(titles[tourStep],29,Color.WHITE);heading.setTypeface(null,1);heading.setLineSpacing(dp(1),1f);heading.setPadding(0,dp(12),0,dp(12));top.addView(heading);
+        LinearLayout panel=column();GradientDrawable panelBg=new GradientDrawable();panelBg.setColor(CARD);panelBg.setCornerRadius(dp(18));panelBg.setStroke(dp(1),Color.rgb(48,62,80));panel.setBackground(panelBg);panel.setPadding(dp(17),dp(17),dp(17),dp(17));
+        TextView desc=text(descriptions[tourStep],16,Color.rgb(220,226,236));desc.setLineSpacing(dp(5),1f);panel.addView(desc);top.addView(panel);
+        LinearLayout progress=new LinearLayout(this);progress.setGravity(Gravity.CENTER_VERTICAL);progress.setPadding(0,dp(22),0,dp(6));
+        for(int i=0;i<5;i++){View segment=new View(this);segment.setBackgroundColor(i<=tourStep?GREEN:Color.rgb(55,65,80));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(4),1);p.rightMargin=dp(5);progress.addView(segment,p);}top.addView(progress);content.addView(top);
+        content.addView(new View(this),new LinearLayout.LayoutParams(-1,0,1));
         if(tourStep>0)buttonAt(content,"BACK",()->{tourStep--;showTutorial();});
-        buttonAt(content,tourStep==4?"FINISH TOUR":"NEXT",()->{if(tourStep<4){tourStep++;showTutorial();}else{getPreferences(0).edit().putBoolean("tour_done",true).apply();page="Home";show();}});
-        TextView skip=text("Skip tour",14,GREEN);skip.setGravity(Gravity.CENTER);skip.setPadding(0,dp(12),0,dp(4));content.addView(skip);skip.setOnClickListener(v->{getPreferences(0).edit().putBoolean("tour_done",true).apply();page="Home";show();});
+        buttonAt(content,tourStep==4?"FINISH":"CONTINUE",()->{if(tourStep<4){tourStep++;showTutorial();}else{getPreferences(0).edit().putBoolean("tour_done",true).apply();page="Home";show();}});
+        TextView skip=text("SKIP INTRODUCTION",12,MUTED);skip.setTypeface(null,1);skip.setGravity(Gravity.CENTER);skip.setPadding(0,dp(10),0,dp(8));content.addView(skip);skip.setOnClickListener(v->{getPreferences(0).edit().putBoolean("tour_done",true).apply();page="Home";show();});
     }
     void buttonAt(LinearLayout parent,String label,Runnable action){
         Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextSize(13);b.setTypeface(null,1);b.setTextColor(Color.rgb(8,18,16));GradientDrawable bg=new GradientDrawable();bg.setColor(GREEN);bg.setCornerRadius(dp(12));b.setBackground(bg);b.setMinHeight(dp(50));b.setMinimumHeight(dp(50));b.setPadding(dp(12),dp(4),dp(12),dp(4));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(50));p.bottomMargin=dp(8);parent.addView(b,p);b.setOnClickListener(v->action.run());
